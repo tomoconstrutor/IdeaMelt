@@ -18,11 +18,12 @@ loadDotEnv();
 const timezone = process.env.IDEAMELT_TIMEZONE || "Europe/London";
 const tone = process.env.IDEAMELT_TONE || "weird future startup scout";
 const date = formatDate(new Date(), timezone);
-const concept = getConcept();
+const sciFiSources = dryRun ? [] : await loadSciFiSources();
+const concept = getConcept(sciFiSources);
 
 const issue = dryRun
-  ? sampleIssue({ date, concept })
-  : await generateIssue({ date, concept, tone });
+  ? sampleIssue({ date, concept, sources: sciFiSources })
+  : await generateIssue({ date, concept, tone, sources: sciFiSources });
 
 validateIssue(issue);
 
@@ -41,6 +42,10 @@ if (!noSave) {
 
 if (send) {
   await sendTelegram(telegramText);
+}
+
+if (!dryRun) {
+  await markSciFiSourcesUsed(sciFiSources, issue.slug, date);
 }
 
 if (dryRun || verbose) {
@@ -72,9 +77,13 @@ function loadDotEnv() {
   }
 }
 
-function getConcept() {
+function getConcept(sources = []) {
   const provided = process.env.IDEAMELT_CONCEPT;
   if (provided && provided.trim()) return provided.trim();
+
+  if (sources.length) {
+    return sources.map((source) => source.deviceName).filter(Boolean).join(" + ");
+  }
 
   const concepts = [
     "personal AI twin",
@@ -98,14 +107,14 @@ function getConcept() {
   return concepts[dayIndex];
 }
 
-async function generateIssue({ date, concept, tone }) {
+async function generateIssue({ date, concept, tone, sources = [] }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is required unless running --dry-run.");
   }
 
   const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
-  const prompt = buildPrompt({ date, concept, tone });
+  const prompt = buildPrompt({ date, concept, tone, sources });
 
   const response = await fetchWithTimeout("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -128,15 +137,18 @@ async function generateIssue({ date, concept, tone }) {
   const body = await response.json();
   const text = extractOutputText(body);
   const issue = parseJsonFromText(text);
-  return normalizeIssue(issue, { date, concept });
+  return normalizeIssue(issue, { date, concept, sources });
 }
 
-function buildPrompt({ date, concept, tone }) {
+function buildPrompt({ date, concept, tone, sources = [] }) {
+  const sourceBlock = formatSourceIdeasForPrompt(sources);
   return `You are writing IdeaMelt, a private daily sci-fi-to-startup scouting note for Tomas Ferreira.
 
 Tone: ${tone}. Make it strange, sharp, fun, practical, and slightly provocative. Think Sam Parr / Neville Medhora style: direct hook, simple words, curiosity, useful business angle. No generic startup jargon.
 
 Generate one daily Sci-Fi Spotlight for ${date} about: ${concept}
+
+${sourceBlock}
 
 Return ONLY valid JSON with this exact shape:
 {
@@ -160,10 +172,16 @@ Return ONLY valid JSON with this exact shape:
 Quality rules:
 - Do not sound generic.
 - Do not describe a fantasy megacorp product as the MVP.
+- Use the source idea bank seeds if provided, but synthesize them into one useful startup angle instead of merely summarizing the novels.
 - Include a plausible buyer/user.
 - Scores must be integers 1-10.
 - The 7-day MVP must be doable by one builder.
 - Make the reader think: “weird, but maybe real.”`;
+}
+
+function formatSourceIdeasForPrompt(sources) {
+  if (!sources.length) return "Sci-fi source seeds: none provided today. Use the fallback concept list.";
+  return `Sci-fi source seeds randomly chosen from the Sci-Fi Idea Bank today:\n${sources.map((source, index) => `${index + 1}. ${source.deviceName} (${source.date || "unknown year"}) — ${source.novel || "unknown work"} by ${source.author || "unknown author"}. Description: ${source.description || "n/a"}. Built: ${source.built || "n/a"}. Product/company clues: ${[source.product, source.byWhom, source.companiesWorkingOnThis].filter(Boolean).join("; ") || "n/a"}. Bits/Atoms: ${source.bitsOrAtoms || "n/a"}.`).join("\n")}`;
 }
 
 function extractOutputText(body) {
@@ -211,6 +229,7 @@ function normalizeIssue(issue, fallback) {
     whyThisMightFail: String(issue.whyThisMightFail || ""),
     verdict: String(issue.verdict || "test"),
     publishableShortVersion: String(issue.publishableShortVersion || ""),
+    sciFiSources: fallback.sources || [],
   };
 }
 
@@ -234,11 +253,21 @@ function validateIssue(issue) {
 }
 
 function formatMarkdown(issue) {
-  return `---\ntype: ideamelt-issue\nproject: IdeaMelt\ndate: ${issue.date}\nstatus: private\nconcept: ${quoteYaml(issue.concept)}\nverdict: ${quoteYaml(issue.verdict)}\n---\n\n# IdeaMelt — Daily Sci-Fi Spotlight — ${issue.date}\n\n## Hook\n${issue.hook}\n\n## Sci-fi concept\n${issue.concept}\n\n## Why this matters now\n${issue.whyNow}\n\n## Now Atoms\n${list(issue.nowAtoms)}\n\n## Not-Yet Atoms\n${list(issue.notYetAtoms)}\n\n## Not-Yet Bits\n${list(issue.notYetBits)}\n\n## Startup opportunity\n${issue.startupOpportunity}\n\n## Who would pay\n${issue.whoWouldPay}\n\n## 7-day MVP\n${issue.sevenDayMvp}\n\n## Scores\n- Difficulty: ${issue.scores.difficulty}/10\n- Market pull: ${issue.scores.marketPull}/10\n- Weirdness: ${issue.scores.weirdness}/10\n- Founder fit for Tomas: ${issue.scores.founderFit}/10\n\n## Why this might fail\n${issue.whyThisMightFail}\n\n## Robin's verdict\n${issue.verdict}\n\n## Publishable short version\n${issue.publishableShortVersion}\n`;
+  return `---\ntype: ideamelt-issue\nproject: IdeaMelt\ndate: ${issue.date}\nstatus: private\nconcept: ${quoteYaml(issue.concept)}\nverdict: ${quoteYaml(issue.verdict)}\n---\n\n# IdeaMelt — Daily Sci-Fi Spotlight — ${issue.date}\n\n## Hook\n${issue.hook}\n\n## Sci-fi concept\n${issue.concept}\n\n## Source seeds\n${formatSourceIdeasForMarkdown(issue.sciFiSources)}\n\n## Why this matters now\n${issue.whyNow}\n\n## Now Atoms\n${list(issue.nowAtoms)}\n\n## Not-Yet Atoms\n${list(issue.notYetAtoms)}\n\n## Not-Yet Bits\n${list(issue.notYetBits)}\n\n## Startup opportunity\n${issue.startupOpportunity}\n\n## Who would pay\n${issue.whoWouldPay}\n\n## 7-day MVP\n${issue.sevenDayMvp}\n\n## Scores\n- Difficulty: ${issue.scores.difficulty}/10\n- Market pull: ${issue.scores.marketPull}/10\n- Weirdness: ${issue.scores.weirdness}/10\n- Founder fit for Tomas: ${issue.scores.founderFit}/10\n\n## Why this might fail\n${issue.whyThisMightFail}\n\n## Robin's verdict\n${issue.verdict}\n\n## Publishable short version\n${issue.publishableShortVersion}\n`;
 }
 
 function formatTelegram(issue) {
-  return `IDEAMELT — DAILY SCI-FI SPOTLIGHT\n${issue.date}\n\n${issue.hook}\n\nConcept: ${issue.concept}\n\nWhy now:\n${issue.whyNow}\n\nNow Atoms:\n${list(issue.nowAtoms)}\n\nNot-Yet Atoms:\n${list(issue.notYetAtoms)}\n\nNot-Yet Bits:\n${list(issue.notYetBits)}\n\nStartup opportunity:\n${issue.startupOpportunity}\n\nWho would pay:\n${issue.whoWouldPay}\n\n7-day MVP:\n${issue.sevenDayMvp}\n\nScores:\n- Difficulty: ${issue.scores.difficulty}/10\n- Market pull: ${issue.scores.marketPull}/10\n- Weirdness: ${issue.scores.weirdness}/10\n- Founder fit: ${issue.scores.founderFit}/10\n\nWhy this might fail:\n${issue.whyThisMightFail}\n\nRobin's verdict: ${issue.verdict}\n\nPublishable short version:\n${issue.publishableShortVersion}`;
+  return `IDEAMELT — DAILY SCI-FI SPOTLIGHT\n${issue.date}\n\n${issue.hook}\n\nConcept: ${issue.concept}\n\nSource seeds:\n${formatSourceIdeasForTelegram(issue.sciFiSources)}\n\nWhy now:\n${issue.whyNow}\n\nNow Atoms:\n${list(issue.nowAtoms)}\n\nNot-Yet Atoms:\n${list(issue.notYetAtoms)}\n\nNot-Yet Bits:\n${list(issue.notYetBits)}\n\nStartup opportunity:\n${issue.startupOpportunity}\n\nWho would pay:\n${issue.whoWouldPay}\n\n7-day MVP:\n${issue.sevenDayMvp}\n\nScores:\n- Difficulty: ${issue.scores.difficulty}/10\n- Market pull: ${issue.scores.marketPull}/10\n- Weirdness: ${issue.scores.weirdness}/10\n- Founder fit: ${issue.scores.founderFit}/10\n\nWhy this might fail:\n${issue.whyThisMightFail}\n\nRobin's verdict: ${issue.verdict}\n\nPublishable short version:\n${issue.publishableShortVersion}`;
+}
+
+function formatSourceIdeasForMarkdown(sources = []) {
+  if (!sources.length) return "- Fallback concept list used; no sheet seeds loaded.";
+  return sources.map((source) => `- **${source.deviceName}** (${source.date || "unknown year"}) — ${source.novel || "unknown work"} by ${source.author || "unknown author"}. ${source.description || ""}`.trim()).join("\n");
+}
+
+function formatSourceIdeasForTelegram(sources = []) {
+  if (!sources.length) return "- Fallback concept list used; no sheet seeds loaded.";
+  return sources.map((source) => `- ${source.deviceName} (${source.date || "unknown year"})`).join("\n");
 }
 
 async function saveLocal(slug, markdown, json) {
@@ -274,6 +303,163 @@ async function saveObsidian(slug, markdown) {
   return filePath;
 }
 
+async function loadSciFiSources() {
+  if (!isEnabled(process.env.IDEAMELT_USE_SCI_FI_SHEET)) return [];
+
+  const spreadsheetId = process.env.IDEAMELT_SCI_FI_SHEET_ID;
+  if (!spreadsheetId) throw new Error("IDEAMELT_SCI_FI_SHEET_ID is required when IDEAMELT_USE_SCI_FI_SHEET=true.");
+
+  const sheetName = process.env.IDEAMELT_SCI_FI_SHEET_NAME || "Sci-Fi Idea Bank";
+  const sourceCount = Number(process.env.IDEAMELT_SCI_FI_SOURCE_COUNT || 3);
+  if (!Number.isInteger(sourceCount) || sourceCount < 1 || sourceCount > 10) {
+    throw new Error("IDEAMELT_SCI_FI_SOURCE_COUNT must be an integer from 1-10.");
+  }
+
+  const values = await readSheetValues(spreadsheetId, `${quoteSheetName(sheetName)}!A1:Z5000`);
+  const parsed = parseSciFiSheet(values);
+  const unused = parsed.rows.filter((row) => !row.usedAt);
+  const pool = unused.length >= sourceCount ? unused : parsed.rows;
+  if (pool.length < sourceCount) {
+    throw new Error(`Sci-Fi Idea Bank has only ${pool.length} usable rows; need ${sourceCount}.`);
+  }
+
+  return pickRandomItems(pool, sourceCount);
+}
+
+function parseSciFiSheet(values) {
+  const headerRowIndex = values.findIndex((row) => row.includes("Device Name") && row.includes("Description"));
+  if (headerRowIndex === -1) throw new Error("Could not find Sci-Fi Idea Bank header row with Device Name and Description.");
+
+  const headers = values[headerRowIndex].map((header) => String(header || "").trim());
+  const usedColumn = process.env.IDEAMELT_SCI_FI_USED_COLUMN || "IdeaMelt Chosen At";
+  const index = (name) => headers.findIndex((header) => header.toLowerCase() === name.toLowerCase());
+  const usedIndex = index(usedColumn);
+
+  const rows = [];
+  for (let rowIndex = headerRowIndex + 1; rowIndex < values.length; rowIndex += 1) {
+    const row = values[rowIndex] || [];
+    const source = {
+      rowNumber: rowIndex + 1,
+      usedColumn,
+      usedColumnIndex: usedIndex,
+      date: cell(row, index("Date")),
+      deviceName: cell(row, index("Device Name")),
+      novel: cell(row, index("Novel")),
+      author: cell(row, index("Author")),
+      description: cell(row, index("Description")),
+      built: cell(row, index("Built?")),
+      byWhom: cell(row, index("By Whom?")),
+      product: cell(row, index("Product")),
+      firstYearMade: cell(row, index("First Year Made")),
+      additionalDetails: cell(row, index("Additional Details")),
+      bitsOrAtoms: cell(row, index("Bits or Atoms?")),
+      companiesWorkingOnThis: cell(row, index("Companies Working on This")),
+      usedAt: usedIndex === -1 ? "" : cell(row, usedIndex),
+    };
+    if (source.deviceName && source.description) rows.push(source);
+  }
+  return { headers, rows, usedColumnIndex: usedIndex };
+}
+
+async function markSciFiSourcesUsed(sources, issueSlug, date) {
+  if (!sources.length || !isEnabled(process.env.IDEAMELT_MARK_SCI_FI_SOURCES_USED)) return;
+
+  const missingColumn = sources.find((source) => source.usedColumnIndex === -1);
+  if (missingColumn) {
+    throw new Error(`Cannot mark Sci-Fi sources used because column "${missingColumn.usedColumn}" does not exist. Create it first, then rerun.`);
+  }
+
+  const spreadsheetId = process.env.IDEAMELT_SCI_FI_SHEET_ID;
+  const sheetName = process.env.IDEAMELT_SCI_FI_SHEET_NAME || "Sci-Fi Idea Bank";
+  const value = `${date} ${issueSlug}`;
+  const data = sources.map((source) => ({
+    range: `${quoteSheetName(sheetName)}!${columnName(source.usedColumnIndex + 1)}${source.rowNumber}`,
+    values: [[value]],
+  }));
+  await writeSheetValues(spreadsheetId, data);
+}
+
+async function readSheetValues(spreadsheetId, range) {
+  const params = new URLSearchParams({ majorDimension: "ROWS" });
+  const apiKey = process.env.GOOGLE_SHEETS_API_KEY;
+  if (apiKey) params.set("key", apiKey);
+
+  const response = await fetchWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?${params.toString()}`, {
+    method: "GET",
+    headers: googleSheetsHeaders(Boolean(apiKey)),
+  }, 30_000);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Google Sheets read failed (${response.status}): ${text.slice(0, 500)}`);
+  }
+  const body = await response.json();
+  return body.values || [];
+}
+
+async function writeSheetValues(spreadsheetId, data) {
+  const response = await fetchWithTimeout(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+    method: "POST",
+    headers: { ...googleSheetsHeaders(false), "Content-Type": "application/json" },
+    body: JSON.stringify({ valueInputOption: "USER_ENTERED", data }),
+  }, 30_000);
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Google Sheets write failed (${response.status}): ${text.slice(0, 500)}`);
+  }
+}
+
+function googleSheetsHeaders(usingApiKey) {
+  if (usingApiKey) return {};
+  const token = process.env.GOOGLE_ACCESS_TOKEN || readGoogleAccessToken();
+  if (!token) {
+    throw new Error("Set GOOGLE_SHEETS_API_KEY, GOOGLE_ACCESS_TOKEN, or IDEAMELT_GOOGLE_TOKEN_PATH for Sci-Fi Idea Bank access.");
+  }
+  return { Authorization: `Bearer ${token}` };
+}
+
+function readGoogleAccessToken() {
+  const tokenPath = process.env.IDEAMELT_GOOGLE_TOKEN_PATH || path.join(process.env.HOME || "", ".hermes/google_token.json");
+  if (!existsSync(tokenPath)) return "";
+  try {
+    const token = JSON.parse(readFileSync(tokenPath, "utf8"));
+    return token.access_token || token.token || "";
+  } catch {
+    return "";
+  }
+}
+
+function pickRandomItems(items, count) {
+  const copy = [...items];
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]];
+  }
+  return copy.slice(0, count);
+}
+
+function cell(row, index) {
+  if (index < 0) return "";
+  return String(row[index] || "").trim();
+}
+
+function quoteSheetName(name) {
+  return `'${String(name).replaceAll("'", "''")}'`;
+}
+
+function columnName(index) {
+  let name = "";
+  while (index > 0) {
+    const remainder = (index - 1) % 26;
+    name = String.fromCharCode(65 + remainder) + name;
+    index = Math.floor((index - 1) / 26);
+  }
+  return name;
+}
+
+function isEnabled(value) {
+  return ["1", "true", "yes", "on"].includes(String(value || "").toLowerCase());
+}
+
 async function sendTelegram(text) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_CHAT_ID;
@@ -305,7 +491,7 @@ function chunkText(text, maxLength) {
   return chunks;
 }
 
-function sampleIssue({ date, concept }) {
+function sampleIssue({ date, concept, sources = [] }) {
   return normalizeIssue({
     date,
     slug: `${date}-${concept}`,
@@ -322,7 +508,7 @@ function sampleIssue({ date, concept }) {
     whyThisMightFail: "The wedge gets killed if the product tries to automate official submissions before users trust it. Start with guidance and reminders, not full autopilot.",
     verdict: "test",
     publishableShortVersion: "Sci-fi promised robot butlers. The buildable version might be an AI butler for bureaucracy: forms, deadlines, renewals, and appointments for expats who hate admin.",
-  }, { date, concept });
+  }, { date, concept, sources });
 }
 
 function toStringArray(value) {

@@ -9,6 +9,8 @@ IdeaMelt is a sci-fi-to-startup opportunity scout. The private v0 generates one 
 The current private loop is intentionally small:
 
 - Generate one weird future startup scout issue.
+- Randomly pull 3 seed ideas from the Google Sheets `Sci-Fi Idea Bank` when `IDEAMELT_USE_SCI_FI_SHEET=true`.
+- Ignore already-used rows if a usage column exists.
 - Save it locally as Markdown and JSON under `data/issues/`.
 - Save it into Obsidian when `IDEAMELT_SAVE_OBSIDIAN=true`.
 - Send it to Telegram when run with `--send`.
@@ -36,9 +38,18 @@ IDEAMELT_TONE=weird future startup scout
 IDEAMELT_SAVE_OBSIDIAN=true
 OBSIDIAN_VAULT_PATH=/home/casapipamania/Documents/Obsidian Vault
 IDEAMELT_OBSIDIAN_ISSUES_DIR=1_Projects/IdeaMelt Issues
+IDEAMELT_USE_SCI_FI_SHEET=true
+IDEAMELT_SCI_FI_SHEET_ID=1sBkJ8nZwyG_J1v_WLub-5RM4GhLWCf_b7ml8_qNgNsg
+IDEAMELT_SCI_FI_SHEET_NAME=Sci-Fi Idea Bank
+IDEAMELT_SCI_FI_SOURCE_COUNT=3
+IDEAMELT_SCI_FI_USED_COLUMN=IdeaMelt Chosen At
+IDEAMELT_MARK_SCI_FI_SOURCES_USED=false
+IDEAMELT_GOOGLE_TOKEN_PATH=/home/casapipamania/.hermes/google_token.json
 ```
 
 Do not commit `.env`.
+
+`IDEAMELT_MARK_SCI_FI_SOURCES_USED=false` is intentional by default. Reading the sheet is safe; writing back to the Google Sheet should only be enabled after the usage column exists and Tomas approves marking rows. The expected column name is `IdeaMelt Chosen At`.
 
 ## Commands
 

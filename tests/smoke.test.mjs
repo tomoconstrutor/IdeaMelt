@@ -69,3 +69,20 @@ test("private daily generator supports Telegram and Obsidian settings", () => {
   assert.match(packageJson, /ideamelt:dry-run/);
   assert.match(packageJson, /ideamelt:generate-send/);
 });
+
+test("private daily generator can use the Sci-Fi Idea Bank without writing to Sheets by default", () => {
+  const env = read(".env.example");
+  const generator = read("scripts/generate-daily-melt.mjs");
+
+  assert.match(env, /IDEAMELT_USE_SCI_FI_SHEET=true/);
+  assert.match(env, /IDEAMELT_SCI_FI_SHEET_ID=1sBkJ8nZwyG_J1v_WLub-5RM4GhLWCf_b7ml8_qNgNsg/);
+  assert.match(env, /IDEAMELT_SCI_FI_SOURCE_COUNT=3/);
+  assert.match(env, /IDEAMELT_SCI_FI_USED_COLUMN=IdeaMelt Chosen At/);
+  assert.match(env, /IDEAMELT_MARK_SCI_FI_SOURCES_USED=false/);
+
+  assert.match(generator, /loadSciFiSources/);
+  assert.match(generator, /pickRandomItems/);
+  assert.match(generator, /IdeaMelt Chosen At/);
+  assert.match(generator, /markSciFiSourcesUsed/);
+  assert.match(generator, /IDEAMELT_MARK_SCI_FI_SOURCES_USED/);
+});
