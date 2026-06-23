@@ -1,0 +1,13 @@
+{
+  "name": "ideamelt",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "ideamelt:dry-run": "node scripts/generate-daily-melt.mjs --dry-run",
+    "ideamelt:generate": "node scripts/generate-daily-melt.mjs",
+    "ideamelt:generate-send": "node scripts/generate-daily-melt.mjs --send",
+    "ideamelt:send-test": "node scripts/send-test-telegram.mjs"
+  }
+}

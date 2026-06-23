@@ -48,3 +48,24 @@ test("beehiiv issue sync creates drafts and refuses non-draft updates", () => {
   assert.match(source, /Refusing to update beehiiv post/);
   assert.match(source, /IDEA_MELT_SYNC_SECRET/);
 });
+
+test("private daily generator supports Telegram and Obsidian settings", () => {
+  const env = read(".env.example");
+  const generator = read("scripts/generate-daily-melt.mjs");
+  const packageJson = read("package.json");
+
+  assert.match(env, /OPENAI_API_KEY=YOUR_OPENAI_API_KEY/);
+  assert.match(env, /TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN/);
+  assert.match(env, /TELEGRAM_CHAT_ID=YOUR_TELEGRAM_CHAT_ID/);
+  assert.match(env, /IDEAMELT_TIMEZONE=Europe\/London/);
+  assert.match(env, /IDEAMELT_SEND_TIME=10:00/);
+  assert.match(env, /IDEAMELT_SAVE_OBSIDIAN=true/);
+  assert.match(env, /IDEAMELT_TONE=weird future startup scout/);
+
+  assert.match(generator, /Daily Sci-Fi Spotlight/);
+  assert.match(generator, /saveObsidian/);
+  assert.match(generator, /sendTelegram/);
+  assert.match(generator, /chunkText/);
+  assert.match(packageJson, /ideamelt:dry-run/);
+  assert.match(packageJson, /ideamelt:generate-send/);
+});
