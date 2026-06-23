@@ -39,17 +39,17 @@ IDEAMELT_SAVE_OBSIDIAN=true
 OBSIDIAN_VAULT_PATH=/home/casapipamania/Documents/Obsidian Vault
 IDEAMELT_OBSIDIAN_ISSUES_DIR=1_Projects/IdeaMelt Issues
 IDEAMELT_USE_SCI_FI_SHEET=true
-IDEAMELT_SCI_FI_SHEET_ID=1sBkJ8nZwyG_J1v_WLub-5RM4GhLWCf_b7ml8_qNgNsg
+IDEAMELT_SCI_FI_SHEET_ID=1l-nAXUFh9ydEAOgd44FwgMA6kr5VlbimWo3xISA8mtI
 IDEAMELT_SCI_FI_SHEET_NAME=Sci-Fi Idea Bank
 IDEAMELT_SCI_FI_SOURCE_COUNT=3
 IDEAMELT_SCI_FI_USED_COLUMN=IdeaMelt Chosen At
-IDEAMELT_MARK_SCI_FI_SOURCES_USED=false
+IDEAMELT_MARK_SCI_FI_SOURCES_USED=true
 IDEAMELT_GOOGLE_TOKEN_PATH=/home/casapipamania/.hermes/google_token.json
 ```
 
 Do not commit `.env`.
 
-`IDEAMELT_MARK_SCI_FI_SOURCES_USED=false` is intentional by default. Reading the sheet is safe; writing back to the Google Sheet should only be enabled after the usage column exists and Tomas approves marking rows. The expected column name is `IdeaMelt Chosen At`.
+`IDEAMELT_MARK_SCI_FI_SOURCES_USED=true` writes the issue date/slug into the `IdeaMelt Chosen At` usage column after a successful generation. Use Tomas's owned copy of the sheet (`Cópia de Sci-Fi Idea Bank`) for this flow; the original `Sci-Fi Idea Bank` is read-only for this account.
 
 ## Commands
 
