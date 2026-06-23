@@ -1,0 +1,10 @@
+project_id = "idea-melt"
+
+[functions.subscribe]
+verify_jwt = false
+
+[functions.search-archive]
+verify_jwt = false
+
+[functions.sync-beehiiv-post]
+verify_jwt = false

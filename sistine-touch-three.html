@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Three.js preview of a human hand almost touching a retro sci-fi wireframe hand.">
+    <title>Sistine Touch Hands Preview</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #020304;
+        --fg: #f3eadb;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: var(--bg);
+        font-family: "Aptos", "Segoe UI", sans-serif;
+      }
+
+      main {
+        position: fixed;
+        inset: 0;
+        background: var(--bg);
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      .fallback {
+        position: absolute;
+        inset: 0;
+        display: none;
+        place-items: center;
+        padding: 2rem;
+        color: var(--fg);
+        background: rgba(2, 3, 4, 0.92);
+        text-align: center;
+      }
+
+      .fallback[data-visible="true"] {
+        display: grid;
+      }
+
+      .fallback p {
+        max-width: 32rem;
+        margin: 0;
+        font-size: 1rem;
+        line-height: 1.45;
+      }
+    </style>
+  </head>
+  <body>
+    <main aria-label="Three dimensional hands almost touching">
+      <canvas id="touch-scene"></canvas>
+      <div class="fallback" id="fallback" role="status">
+        <p>Three.js could not load. Serve this file through the local preview server or allow the browser to load the Three.js module.</p>
+      </div>
+    </main>
+
+    <script type="module">
+      const canvas = document.querySelector("#touch-scene");
+      const fallback = document.querySelector("#fallback");
+
+      window.addEventListener("error", () => {
+        fallback.dataset.visible = "true";
+      });
+
+      const THREE = await import("https://unpkg.com/three@0.164.1/build/three.module.js").catch(() => null);
+      if (!THREE) {
+        fallback.dataset.visible = "true";
+        throw new Error("Three.js module failed to load.");
+      }
+
+      const renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: true,
+        alpha: false,
+        powerPreference: "high-performance",
+      });
+      renderer.setClearColor(0x020304, 1);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.16;
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
+      camera.position.set(0, 0, 7.35);
+
+      const root = new THREE.Group();
+      root.rotation.set(-0.06, -0.14, 0.02);
+      scene.add(root);
+
+      const clock = new THREE.Clock();
+      const touchPoint = new THREE.Vector3(0.02, 0.02, 0.16);
+      const pointer = new THREE.Vector2();
+      const targetPointer = new THREE.Vector2();
+
+      const skin = new THREE.MeshStandardMaterial({
+        color: 0xd8966f,
+        roughness: 0.58,
+        metalness: 0.02,
+      });
+      const skinWarm = new THREE.MeshStandardMaterial({
+        color: 0xf0b48a,
+        roughness: 0.55,
+        metalness: 0.01,
+      });
+      const skinShadow = new THREE.MeshStandardMaterial({
+        color: 0x8f4f3d,
+        roughness: 0.8,
+        metalness: 0,
+      });
+      const nail = new THREE.MeshStandardMaterial({
+        color: 0xf3c9b3,
+        roughness: 0.52,
+        metalness: 0,
+      });
+      const crease = new THREE.MeshBasicMaterial({
+        color: 0x7f3e32,
+        transparent: true,
+        opacity: 0.3,
+      });
+      const cuff = new THREE.MeshStandardMaterial({
+        color: 0xf0f3ef,
+        roughness: 0.38,
+        metalness: 0.02,
+      });
+      const sleeve = new THREE.MeshStandardMaterial({
+        color: 0x1d2326,
+        roughness: 0.68,
+        metalness: 0.08,
+      });
+      const digitalCore = new THREE.MeshBasicMaterial({
+        color: 0x041008,
+        transparent: true,
+        opacity: 0.5,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const digitalLine = new THREE.LineBasicMaterial({
+        color: 0x2dff7a,
+        transparent: true,
+        opacity: 0.92,
+        blending: THREE.AdditiveBlending,
+      });
+      const digitalRim = new THREE.MeshBasicMaterial({
+        color: 0x2dff7a,
+        transparent: true,
+        opacity: 0.18,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      });
+
+      scene.add(new THREE.AmbientLight(0x8899aa, 0.36));
+
+      const keyLight = new THREE.DirectionalLight(0xffd2aa, 5.2);
+      keyLight.position.set(3.4, 3.2, 5.4);
+      scene.add(keyLight);
+
+      const fillLight = new THREE.DirectionalLight(0x6087ff, 1.35);
+      fillLight.position.set(-3.8, -1.2, 3.2);
+      scene.add(fillLight);
+
+      const greenRimLight = new THREE.DirectionalLight(0x35ff8c, 2.8);
+      greenRimLight.position.set(-4.2, 2.9, 3.8);
+      scene.add(greenRimLight);
+
+      const sparkLight = new THREE.PointLight(0xffd9a6, 3.6, 2.2, 1.8);
+      sparkLight.position.copy(touchPoint);
+      scene.add(sparkLight);
+
+      const humanHand = makeHumanHand();
+      const digitalHand = makeDigitalHand();
+      const spark = makeTouchSpark();
+      root.add(humanHand, digitalHand, spark.group);
+      root.userData.baseZ = 0.02;
+
+      window.addEventListener("resize", resize);
+      window.addEventListener("pointermove", (event) => {
+        const width = Math.max(1, window.innerWidth);
+        const height = Math.max(1, window.innerHeight);
+        targetPointer.x = (event.clientX / width - 0.5) * 2;
+        targetPointer.y = (event.clientY / height - 0.5) * -2;
+      });
+
+      resize();
+      animate();
+
+      function makeHumanHand() {
+        const group = new THREE.Group();
+
+        const sleeveTube = makeOrganicTube([
+          v(2.9, -1.95, -0.04),
+          v(2.42, -1.72, -0.01),
+          v(2.0, -1.43, 0.02),
+          v(1.66, -1.21, 0.04),
+        ], {
+          widths: [[0, 0.43], [0.7, 0.37], [1, 0.33]],
+          thicknessRatio: 0.6,
+          rings: 32,
+          sides: 22,
+          material: sleeve,
+          capScale: 0.98,
+        });
+        group.add(sleeveTube.mesh);
+
+        const cuffTube = makeOrganicTube([
+          v(1.77, -1.26, 0.05),
+          v(1.56, -1.12, 0.07),
+          v(1.36, -0.99, 0.08),
+        ], {
+          widths: [[0, 0.33], [1, 0.29]],
+          thicknessRatio: 0.56,
+          rings: 20,
+          sides: 22,
+          material: cuff,
+          capScale: 0.96,
+        });
+        group.add(cuffTube.mesh);
+
+        const wristTube = makeOrganicTube([
+          v(1.33, -0.98, 0.1),
+          v(1.12, -0.82, 0.12),
+          v(0.98, -0.68, 0.13),
+        ], {
+          widths: [[0, 0.24], [1, 0.22]],
+          thicknessRatio: 0.74,
+          rings: 22,
+          sides: 24,
+          material: skin,
+          capScale: 0.88,
+        });
+        group.add(wristTube.mesh);
+
+        const palm = makePalm({
+          center: v(0.96, -0.65, 0.12),
+          scale: v(0.43, 0.66, 0.19),
+          rotationZ: 0.74,
+          material: skin,
+          distort: "human",
+        });
+        group.add(palm);
+
+        const index = addHumanFinger(group, [
+          v(0.69, -0.43, 0.17),
+          v(0.48, -0.27, 0.17),
+          v(0.28, -0.12, 0.15),
+          v(0.105, -0.018, 0.14),
+        ], {
+          widths: [[0, 0.112], [0.36, 0.097], [0.7, 0.078], [1, 0.049]],
+          bulges: [[0.16, 0.038, 0.022], [0.49, 0.05, 0.018], [0.77, 0.045, 0.012]],
+          nail: true,
+          creaseT: [0.18, 0.52, 0.78],
+        });
+
+        addHumanFinger(group, [
+          v(0.86, -0.32, 0.19),
+          v(0.78, -0.08, 0.2),
+          v(0.65, 0.08, 0.17),
+          v(0.51, 0.11, 0.13),
+        ], {
+          widths: [[0, 0.119], [0.38, 0.102], [0.72, 0.082], [1, 0.055]],
+          bulges: [[0.18, 0.04, 0.022], [0.52, 0.05, 0.02], [0.78, 0.045, 0.014]],
+          nail: true,
+          creaseT: [0.2, 0.54, 0.8],
+        });
+
+        addHumanFinger(group, [
+          v(1.03, -0.34, 0.16),
+          v(0.99, -0.1, 0.16),
+          v(0.87, 0.02, 0.12),
+          v(0.73, -0.02, 0.09),
+        ], {
+          widths: [[0, 0.108], [0.4, 0.092], [0.72, 0.073], [1, 0.05]],
+          bulges: [[0.18, 0.04, 0.018], [0.52, 0.05, 0.017], [0.78, 0.045, 0.012]],
+          nail: true,
+          creaseT: [0.22, 0.56],
+        });
+
+        addHumanFinger(group, [
+          v(1.2, -0.43, 0.11),
+          v(1.19, -0.23, 0.1),
+          v(1.08, -0.12, 0.075),
+          v(0.96, -0.17, 0.055),
+        ], {
+          widths: [[0, 0.089], [0.45, 0.075], [0.76, 0.058], [1, 0.04]],
+          bulges: [[0.2, 0.04, 0.014], [0.56, 0.045, 0.013]],
+          nail: true,
+          creaseT: [0.24, 0.58],
+        });
+
+        addHumanFinger(group, [
+          v(0.91, -0.83, 0.2),
+          v(0.65, -0.83, 0.24),
+          v(0.44, -0.68, 0.23),
+          v(0.35, -0.5, 0.18),
+        ], {
+          widths: [[0, 0.13], [0.45, 0.105], [0.78, 0.079], [1, 0.06]],
+          bulges: [[0.24, 0.06, 0.02], [0.63, 0.05, 0.014]],
+          nail: true,
+          creaseT: [0.28, 0.64],
+        });
+
+        const palmWarm = makePalm({
+          center: v(0.83, -0.53, 0.23),
+          scale: v(0.22, 0.36, 0.045),
+          rotationZ: 0.75,
+          material: skinWarm,
+          distort: "pad",
+        });
+        palmWarm.material = skinWarm;
+        group.add(palmWarm);
+
+        index.mesh.material = skinWarm;
+        return group;
+      }
+
+      function makeDigitalHand() {
+        const group = new THREE.Group();
+
+        const forearm = addDigitalTube(group, [
+          v(-2.65, 1.66, 0.04),
+          v(-2.09, 1.37, 0.06),
+          v(-1.57, 1.06, 0.08),
+          v(-1.22, 0.83, 0.1),
+        ], {
+          widths: [[0, 0.28], [0.55, 0.25], [1, 0.22]],
+          thicknessRatio: 0.58,
+          rings: 34,
+          sides: 18,
+          ringStep: 4,
+          longitudes: 8,
+        });
+
+        const palm = makePalm({
+          center: v(-0.98, 0.62, 0.1),
+          scale: v(0.4, 0.58, 0.17),
+          rotationZ: -2.08,
+          material: digitalCore,
+          distort: "digital",
+        });
+        group.add(palm);
+        addPalmGrid(group, {
+          center: v(-0.98, 0.62, 0.1),
+          scale: v(0.42, 0.6, 0.18),
+          rotationZ: -2.08,
+          rings: 8,
+          longitudes: 8,
+        });
+
+        const glowPalm = makePalm({
+          center: v(-0.98, 0.62, 0.1),
+          scale: v(0.43, 0.61, 0.175),
+          rotationZ: -2.08,
+          material: digitalRim,
+          distort: "digital",
+        });
+        group.add(glowPalm);
+
+        addDigitalTube(group, [
+          v(-0.72, 0.43, 0.14),
+          v(-0.49, 0.27, 0.14),
+          v(-0.27, 0.13, 0.14),
+          v(-0.065, 0.046, 0.14),
+        ], {
+          widths: [[0, 0.096], [0.38, 0.08], [0.74, 0.064], [1, 0.035]],
+          thicknessRatio: 0.7,
+          rings: 34,
+          sides: 18,
+          ringStep: 4,
+          longitudes: 7,
+          endpointGlow: true,
+        });
+
+        addDigitalTube(group, [
+          v(-0.78, 0.58, 0.15),
+          v(-0.55, 0.48, 0.14),
+          v(-0.36, 0.35, 0.13),
+          v(-0.24, 0.25, 0.11),
+        ], {
+          widths: [[0, 0.095], [0.4, 0.078], [0.74, 0.058], [1, 0.036]],
+          thicknessRatio: 0.7,
+          rings: 28,
+          sides: 18,
+          ringStep: 4,
+          longitudes: 7,
+        });
+
+        addDigitalTube(group, [
+          v(-0.93, 0.64, 0.12),
+          v(-0.78, 0.42, 0.1),
+          v(-0.62, 0.28, 0.085),
+          v(-0.48, 0.25, 0.075),
+        ], {
+          widths: [[0, 0.099], [0.42, 0.08], [0.75, 0.058], [1, 0.037]],
+          thicknessRatio: 0.68,
+          rings: 28,
+          sides: 18,
+          ringStep: 4,
+          longitudes: 7,
+        });
+
+        addDigitalTube(group, [
+          v(-1.08, 0.56, 0.09),
+          v(-0.97, 0.36, 0.07),
+          v(-0.83, 0.26, 0.055),
+          v(-0.68, 0.28, 0.05),
+        ], {
+          widths: [[0, 0.08], [0.42, 0.064], [0.77, 0.048], [1, 0.032]],
+          thicknessRatio: 0.66,
+          rings: 26,
+          sides: 16,
+          ringStep: 4,
+          longitudes: 6,
+        });
+
+        addDigitalTube(group, [
+          v(-1.1, 0.37, 0.14),
+          v(-0.88, 0.22, 0.16),
+          v(-0.67, 0.2, 0.15),
+          v(-0.51, 0.27, 0.12),
+        ], {
+          widths: [[0, 0.105], [0.45, 0.083], [0.78, 0.06], [1, 0.04]],
+          thicknessRatio: 0.7,
+          rings: 27,
+          sides: 18,
+          ringStep: 4,
+          longitudes: 7,
+        });
+
+        addTendonLine(group, [
+          v(-1.35, 0.91, 0.27),
+          v(-1.02, 0.67, 0.28),
+          v(-0.56, 0.32, 0.26),
+          v(-0.1, 0.06, 0.22),
+        ], 0.004, 0x2dff7a, 0.75);
+        addTendonLine(group, [
+          v(-1.34, 0.84, -0.02),
+          v(-1.05, 0.58, -0.01),
+          v(-0.77, 0.4, 0.0),
+        ], 0.004, 0x2dff7a, 0.52);
+
+        forearm.mesh.renderOrder = 1;
+        return group;
+      }
+
+      function addHumanFinger(parent, points, options) {
+        const tube = makeOrganicTube(points, {
+          widths: options.widths,
+          bulges: options.bulges || [],
+          thicknessRatio: 0.72,
+          rings: 34,
+          sides: 26,
+          material: skin,
+          capScale: 0.86,
+        });
+        parent.add(tube.mesh);
+
+        if (options.creaseT) {
+          options.creaseT.forEach((t) => addFingerCrease(parent, tube, t));
+        }
+
+        if (options.nail) {
+          addNail(parent, points[points.length - 2], points[points.length - 1], tube.profile(0.96).width);
+        }
+
+        return tube;
+      }
+
+      function addDigitalTube(parent, points, options) {
+        const tube = makeOrganicTube(points, {
+          widths: options.widths,
+          thicknessRatio: options.thicknessRatio || 0.7,
+          rings: options.rings || 28,
+          sides: options.sides || 18,
+          material: digitalCore,
+          capScale: 0.9,
+        });
+        parent.add(tube.mesh);
+
+        const glowTube = makeOrganicTube(points, {
+          widths: options.widths.map(([t, width]) => [t, width * 1.035]),
+          thicknessRatio: options.thicknessRatio || 0.7,
+          rings: options.rings || 28,
+          sides: options.sides || 18,
+          material: digitalRim,
+          capScale: 0.9,
+        });
+        parent.add(glowTube.mesh);
+
+        addTubeGrid(parent, tube, {
+          ringStep: options.ringStep || 4,
+          longitudes: options.longitudes || 7,
+        });
+
+        if (options.endpointGlow) {
+          const tip = points[points.length - 1];
+          const tipLight = new THREE.PointLight(0x2dff7a, 1.4, 0.9, 1.6);
+          tipLight.position.copy(tip);
+          parent.add(tipLight);
+        }
+
+        return tube;
+      }
+
+      function makeOrganicTube(points, options) {
+        const curve = new THREE.CatmullRomCurve3(points);
+        const rings = options.rings || 28;
+        const sides = options.sides || 20;
+        const vertices = [];
+        const uvs = [];
+        const indices = [];
+        const ringCache = [];
+        const profile = (t) => {
+          const baseWidth = interpolateStops(options.widths, t);
+          const bulge = (options.bulges || []).reduce((sum, [center, spread, amount]) => {
+            return sum + Math.exp(-Math.pow((t - center) / spread, 2)) * amount;
+          }, 0);
+          const width = baseWidth + bulge;
+          return {
+            width,
+            thickness: width * (options.thicknessRatio || 0.72),
+          };
+        };
+
+        for (let i = 0; i <= rings; i += 1) {
+          const t = i / rings;
+          const basis = sampleBasis(curve, t);
+          const size = profile(t);
+          const ring = [];
+
+          for (let j = 0; j < sides; j += 1) {
+            const a = (j / sides) * Math.PI * 2;
+            const dorsalLift = Math.max(0, Math.sin(a)) * (size.thickness * 0.1);
+            const point = basis.position.clone()
+              .addScaledVector(basis.normal, Math.cos(a) * size.width)
+              .addScaledVector(basis.binormal, Math.sin(a) * size.thickness + dorsalLift);
+            vertices.push(point.x, point.y, point.z);
+            uvs.push(t, j / sides);
+            ring.push(point);
+          }
+
+          ringCache.push(ring);
+        }
+
+        for (let i = 0; i < rings; i += 1) {
+          for (let j = 0; j < sides; j += 1) {
+            const a = i * sides + j;
+            const b = i * sides + ((j + 1) % sides);
+            const c = (i + 1) * sides + j;
+            const d = (i + 1) * sides + ((j + 1) % sides);
+            indices.push(a, c, b, b, c, d);
+          }
+        }
+
+        const startCenterIndex = vertices.length / 3;
+        const start = curve.getPoint(0);
+        vertices.push(start.x, start.y, start.z);
+        uvs.push(0, 0.5);
+        for (let j = 0; j < sides; j += 1) {
+          indices.push(startCenterIndex, (j + 1) % sides, j);
+        }
+
+        const endCenterIndex = vertices.length / 3;
+        const end = curve.getPoint(1);
+        vertices.push(end.x, end.y, end.z);
+        uvs.push(1, 0.5);
+        const endOffset = rings * sides;
+        for (let j = 0; j < sides; j += 1) {
+          indices.push(endCenterIndex, endOffset + j, endOffset + ((j + 1) % sides));
+        }
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setIndex(indices);
+        geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+        geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+        geometry.computeVertexNormals();
+
+        const mesh = new THREE.Mesh(geometry, options.material);
+        return {
+          mesh,
+          curve,
+          profile,
+          rings,
+          sides,
+          sample: (t, angle) => sampleTubePoint(curve, profile, t, angle),
+          ringCache,
+        };
+      }
+
+      function sampleTubePoint(curve, profile, t, angle) {
+        const basis = sampleBasis(curve, t);
+        const size = profile(t);
+        return basis.position.clone()
+          .addScaledVector(basis.normal, Math.cos(angle) * size.width)
+          .addScaledVector(basis.binormal, Math.sin(angle) * size.thickness);
+      }
+
+      function sampleBasis(curve, t) {
+        const position = curve.getPoint(t);
+        const tangent = curve.getTangent(t).normalize();
+        let binormal = new THREE.Vector3(0, 0, 1);
+        if (Math.abs(tangent.dot(binormal)) > 0.92) {
+          binormal = new THREE.Vector3(0, 1, 0);
+        }
+        const normal = new THREE.Vector3().crossVectors(binormal, tangent).normalize();
+        binormal = new THREE.Vector3().crossVectors(tangent, normal).normalize();
+        return { position, tangent, normal, binormal };
+      }
+
+      function addTubeGrid(parent, tube, options) {
+        const ringStep = options.ringStep || 4;
+        const longitudes = options.longitudes || 7;
+
+        for (let i = 1; i < tube.rings; i += ringStep) {
+          const t = i / tube.rings;
+          const points = [];
+          for (let j = 0; j <= 54; j += 1) {
+            points.push(tube.sample(t, (j / 54) * Math.PI * 2));
+          }
+          parent.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), digitalLine));
+        }
+
+        for (let l = 0; l < longitudes; l += 1) {
+          const angle = (l / longitudes) * Math.PI * 2;
+          const points = [];
+          for (let i = 0; i <= tube.rings; i += 1) {
+            points.push(tube.sample(i / tube.rings, angle));
+          }
+          parent.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), digitalLine));
+        }
+      }
+
+      function makePalm(config) {
+        const geometry = new THREE.SphereGeometry(1, 44, 26);
+        const position = geometry.attributes.position;
+        for (let i = 0; i < position.count; i += 1) {
+          const x = position.getX(i);
+          const y = position.getY(i);
+          const z = position.getZ(i);
+          let nx = x;
+          let ny = y;
+          let nz = z;
+
+          if (config.distort === "human") {
+            const wristNarrow = smoothstep(-0.95, -0.2, -y) * 0.18;
+            const knuckleWide = smoothstep(0.12, 0.95, y) * 0.12;
+            nx *= 1 - wristNarrow + knuckleWide;
+            ny *= 1 + smoothstep(0.25, 1, y) * 0.06;
+            nz *= 0.88 + smoothstep(-0.3, 0.7, y) * 0.18;
+          } else if (config.distort === "digital") {
+            nx *= 1 + Math.sin((y + 1) * Math.PI) * 0.08;
+            nz *= 0.86;
+          } else if (config.distort === "pad") {
+            nx *= 0.9;
+            ny *= 0.78;
+            nz *= 0.55;
+          }
+
+          position.setXYZ(i, nx, ny, nz);
+        }
+
+        geometry.computeVertexNormals();
+        const mesh = new THREE.Mesh(geometry, config.material);
+        mesh.position.copy(config.center);
+        mesh.scale.copy(config.scale);
+        mesh.rotation.z = config.rotationZ;
+        return mesh;
+      }
+
+      function addPalmGrid(parent, config) {
+        const gridGroup = new THREE.Group();
+        gridGroup.position.copy(config.center);
+        gridGroup.rotation.z = config.rotationZ;
+
+        for (let r = 1; r < config.rings; r += 1) {
+          const y = -0.82 + (r / config.rings) * 1.64;
+          const width = Math.sqrt(Math.max(0.02, 1 - y * y));
+          const points = [];
+          for (let i = 0; i <= 64; i += 1) {
+            const a = (i / 64) * Math.PI * 2;
+            points.push(v(
+              Math.cos(a) * config.scale.x * width,
+              y * config.scale.y,
+              Math.sin(a) * config.scale.z * 0.82
+            ));
+          }
+          gridGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), digitalLine));
+        }
+
+        for (let l = 0; l < config.longitudes; l += 1) {
+          const a = (l / config.longitudes) * Math.PI * 2;
+          const points = [];
+          for (let i = 0; i <= 48; i += 1) {
+            const y = -0.9 + (i / 48) * 1.8;
+            const width = Math.sqrt(Math.max(0.02, 1 - y * y));
+            points.push(v(
+              Math.cos(a) * config.scale.x * width,
+              y * config.scale.y,
+              Math.sin(a) * config.scale.z * 0.82
+            ));
+          }
+          gridGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), digitalLine));
+        }
+
+        parent.add(gridGroup);
+      }
+
+      function addFingerCrease(parent, tube, t) {
+        const points = [];
+        for (let i = 0; i <= 16; i += 1) {
+          const a = THREE.MathUtils.lerp(Math.PI * 0.22, Math.PI * 0.78, i / 16);
+          points.push(tube.sample(t, a));
+        }
+        parent.add(makeTubeLine(points, 0.0038, crease));
+      }
+
+      function addNail(parent, previous, tip, width) {
+        const direction = tip.clone().sub(previous).normalize();
+        const angle = Math.atan2(direction.y, direction.x);
+        const nailMesh = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 12), nail);
+        nailMesh.scale.set(width * 0.56, width * 0.26, width * 0.08);
+        nailMesh.position.copy(tip)
+          .addScaledVector(direction, -width * 0.24)
+          .add(new THREE.Vector3(0, 0, width * 0.48));
+        nailMesh.rotation.z = angle;
+        nailMesh.rotation.x = 0.18;
+        parent.add(nailMesh);
+      }
+
+      function addTendonLine(parent, points, radius, color, opacity) {
+        const material = new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity,
+        });
+        parent.add(makeTubeLine(points, radius, material));
+      }
+
+      function makeTubeLine(points, radius, material) {
+        const curve = new THREE.CatmullRomCurve3(points);
+        return new THREE.Mesh(new THREE.TubeGeometry(curve, 24, radius, 8, false), material);
+      }
+
+      function makeTouchSpark() {
+        const group = new THREE.Group();
+        group.position.copy(touchPoint);
+
+        const texture = makeGlowTexture();
+        const core = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: texture,
+          color: 0xfff2cf,
+          transparent: true,
+          opacity: 0.88,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }));
+        core.scale.set(0.32, 0.32, 1);
+        group.add(core);
+
+        const greenHalo = new THREE.Sprite(new THREE.SpriteMaterial({
+          map: texture,
+          color: 0x31ff84,
+          transparent: true,
+          opacity: 0.36,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }));
+        greenHalo.scale.set(0.5, 0.5, 1);
+        group.add(greenHalo);
+
+        const rayMaterial = new THREE.LineBasicMaterial({
+          color: 0xffd8a8,
+          transparent: true,
+          opacity: 0.42,
+          blending: THREE.AdditiveBlending,
+        });
+        for (let i = 0; i < 6; i += 1) {
+          const angle = (i / 6) * Math.PI * 2 + 0.2;
+          const length = i % 2 === 0 ? 0.32 : 0.22;
+          group.add(new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints([
+              v(0, 0, 0),
+              v(Math.cos(angle) * length, Math.sin(angle) * length, 0),
+            ]),
+            rayMaterial
+          ));
+        }
+
+        return { group, core, greenHalo };
+      }
+
+      function makeGlowTexture() {
+        const size = 256;
+        const c = document.createElement("canvas");
+        c.width = size;
+        c.height = size;
+        const ctx = c.getContext("2d");
+        const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+        g.addColorStop(0, "rgba(255,255,255,1)");
+        g.addColorStop(0.18, "rgba(255,230,178,0.88)");
+        g.addColorStop(0.44, "rgba(61,255,135,0.26)");
+        g.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, size, size);
+        return new THREE.CanvasTexture(c);
+      }
+
+      function interpolateStops(stops, t) {
+        if (t <= stops[0][0]) {
+          return stops[0][1];
+        }
+        for (let i = 0; i < stops.length - 1; i += 1) {
+          const [aT, aV] = stops[i];
+          const [bT, bV] = stops[i + 1];
+          if (t <= bT) {
+            const local = (t - aT) / Math.max(0.0001, bT - aT);
+            return THREE.MathUtils.lerp(aV, bV, smoothstep(0, 1, local));
+          }
+        }
+        return stops[stops.length - 1][1];
+      }
+
+      function smoothstep(edge0, edge1, x) {
+        const t = THREE.MathUtils.clamp((x - edge0) / Math.max(0.0001, edge1 - edge0), 0, 1);
+        return t * t * (3 - 2 * t);
+      }
+
+      function v(x, y, z) {
+        return new THREE.Vector3(x, y, z);
+      }
+
+      function resize() {
+        const width = Math.max(1, window.innerWidth);
+        const height = Math.max(1, window.innerHeight);
+        renderer.setSize(width, height, false);
+        camera.aspect = width / height;
+
+        if (camera.aspect < 0.75) {
+          camera.position.set(0, 0.02, 10.6);
+          root.scale.setScalar(0.7);
+          root.position.set(-0.02, -0.02, 0);
+          root.userData.baseZ = -0.58;
+        } else if (camera.aspect > 1.55) {
+          camera.position.set(0, 0, 7.05);
+          root.scale.setScalar(1.03);
+          root.position.set(0, 0, 0);
+          root.userData.baseZ = 0.02;
+        } else {
+          camera.position.set(0, 0, 7.35);
+          root.scale.setScalar(1);
+          root.position.set(0, 0, 0);
+          root.userData.baseZ = 0.02;
+        }
+
+        camera.updateProjectionMatrix();
+      }
+
+      function animate() {
+        const elapsed = clock.getElapsedTime();
+        pointer.lerp(targetPointer, 0.04);
+
+        root.rotation.y = -0.14 + pointer.x * 0.05 + Math.sin(elapsed * 0.35) * 0.01;
+        root.rotation.x = -0.06 - pointer.y * 0.035 + Math.cos(elapsed * 0.3) * 0.008;
+        root.rotation.z = root.userData.baseZ + Math.sin(elapsed * 0.28) * 0.006;
+
+        humanHand.position.y = Math.sin(elapsed * 0.9 + 1.4) * 0.012;
+        digitalHand.position.y = Math.sin(elapsed * 1.05) * 0.014;
+
+        const pulse = 1 + Math.sin(elapsed * 4.2) * 0.06;
+        spark.core.scale.setScalar(0.3 * pulse);
+        spark.greenHalo.scale.setScalar(0.48 + Math.sin(elapsed * 2.4) * 0.035);
+        sparkLight.intensity = 3.1 + Math.sin(elapsed * 4.2) * 0.45;
+
+        renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+      }
+    </script>
+  </body>
+</html>
