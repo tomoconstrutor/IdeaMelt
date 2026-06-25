@@ -1,4 +1,3 @@
 window.IDEA_MELT_CONFIG = {
-  functionsBaseUrl: "https://bxvasrqaejkcvrkzqjsp.functions.supabase.co",
-  supabaseAnonKey: "",
+  formspreeEndpoint: "https://formspree.io/f/mgojaavo",
 };

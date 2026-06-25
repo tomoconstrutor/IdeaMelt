@@ -1,19 +1,20 @@
 (function () {
   const config = window.IDEA_MELT_CONFIG || {};
-  const forms = document.querySelectorAll("[data-signup-form]");
-  const utmKeys = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+  const form = document.querySelector("[data-signup-form]");
 
-  forms.forEach((form) => {
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      await submitSignup(form);
-    });
+  if (!form) {
+    return;
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await submitSignup(form);
   });
 
-  async function submitSignup(form) {
-    const emailInput = form.querySelector('input[name="email"]');
-    const honeypotInput = form.querySelector('input[name="website"]');
-    const button = form.querySelector("button");
+  async function submitSignup(signupForm) {
+    const emailInput = signupForm.querySelector('input[name="email"]');
+    const honeypotInput = signupForm.querySelector('input[name="_gotcha"]');
+    const button = signupForm.querySelector("button");
 
     if (!emailInput || !button) {
       return;
@@ -21,95 +22,70 @@
 
     const email = emailInput.value.trim();
     if (!isValidEmail(email)) {
-      setMessage(form, "Hmm. That email looks off.", "error");
+      setMessage(signupForm, "Hmm. That email looks off.", "error");
       emailInput.focus();
       return;
     }
 
-    const endpoint = getSubscribeEndpoint();
+    const endpoint = getFormspreeEndpoint();
     if (!endpoint) {
-      setMessage(form, "Signup is not wired yet.", "error");
+      setMessage(signupForm, "Formspree is not wired yet. Replace YOUR_FORM_ID first.", "error");
       return;
     }
 
-    setFormState(form, true);
-    setMessage(form, "Adding you...", "neutral");
+    setFormState(signupForm, true);
+    setMessage(signupForm, "Adding you...", "neutral");
 
     try {
       const response = await fetch(endpoint, {
         method: "POST",
-        headers: buildHeaders(),
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           email,
-          sourceForm: form.dataset.sourceForm || "unknown",
-          website: honeypotInput ? honeypotInput.value : "",
-          utm: readUtmParams(),
-          referringSite: document.referrer || null,
+          _gotcha: honeypotInput ? honeypotInput.value : "",
+          source: signupForm.dataset.sourceForm || "github-pages",
         }),
       });
 
-      const body = await safeJson(response);
-      if (!response.ok || !body || body.ok !== true) {
-        throw new Error(body && body.message ? body.message : "Signup failed. Try again in a moment.");
+      if (!response.ok) {
+        throw new Error("Signup failed. Try again in a moment.");
       }
 
-      form.reset();
-      setMessage(form, body.message || "Nice. You're on the list.", "success");
+      signupForm.reset();
+      setMessage(signupForm, "Nice. You're on the list.", "success");
     } catch (error) {
-      setMessage(form, error.message || "Something snapped. Try again in a minute.", "error");
+      setMessage(signupForm, error.message || "Something snapped. Try again in a minute.", "error");
     } finally {
-      setFormState(form, false);
+      setFormState(signupForm, false);
     }
   }
 
-  function getSubscribeEndpoint() {
-    const baseUrl = typeof config.functionsBaseUrl === "string"
-      ? config.functionsBaseUrl.trim().replace(/\/+$/, "")
+  function getFormspreeEndpoint() {
+    const endpoint = typeof config.formspreeEndpoint === "string"
+      ? config.formspreeEndpoint.trim()
       : "";
 
-    if (!baseUrl || baseUrl.includes("YOUR_")) {
+    if (!endpoint || endpoint.includes("YOUR_FORM_ID")) {
       return "";
     }
 
-    return `${baseUrl}/subscribe`;
+    return endpoint;
   }
 
-  function buildHeaders() {
-    const headers = {
-      "Content-Type": "application/json",
-    };
-
-    if (typeof config.supabaseAnonKey === "string" && config.supabaseAnonKey.trim()) {
-      headers.apikey = config.supabaseAnonKey.trim();
-      headers.Authorization = `Bearer ${config.supabaseAnonKey.trim()}`;
-    }
-
-    return headers;
-  }
-
-  function readUtmParams() {
-    const params = new URLSearchParams(window.location.search);
-    return utmKeys.reduce((utm, key) => {
-      const value = params.get(key);
-      if (value) {
-        utm[key] = value.slice(0, 200);
-      }
-
-      return utm;
-    }, {});
-  }
-
-  function setFormState(form, isLoading) {
-    const button = form.querySelector("button");
-    form.dataset.state = isLoading ? "loading" : "idle";
+  function setFormState(signupForm, isLoading) {
+    const button = signupForm.querySelector("button");
+    signupForm.dataset.state = isLoading ? "loading" : "idle";
 
     if (button) {
       button.disabled = isLoading;
     }
   }
 
-  function setMessage(form, message, tone) {
-    const messageElement = form.querySelector("[data-form-message]");
+  function setMessage(signupForm, message, tone) {
+    const messageElement = signupForm.querySelector("[data-form-message]");
     if (!messageElement) {
       return;
     }
@@ -120,13 +96,5 @@
 
   function isValidEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email);
-  }
-
-  async function safeJson(response) {
-    try {
-      return await response.json();
-    } catch {
-      return null;
-    }
   }
 })();

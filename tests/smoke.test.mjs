@@ -7,13 +7,21 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf
 test("signup forms are wired to frontend submit handler", () => {
   const html = read("index.html");
   const formMatches = html.match(/data-signup-form/g) || [];
+  const config = read("app.config.js");
+  const app = read("app.js");
 
-  assert.equal(formMatches.length, 2);
+  assert.equal(formMatches.length, 1);
   assert.match(html, /<script src="app\.config\.js"><\/script>/);
   assert.match(html, /<script src="app\.js" defer><\/script>/);
   assert.match(html, /name="email"/);
-  assert.match(html, /name="website"/);
+  assert.match(html, /placeholder="type your email here"/);
+  assert.match(html, /Subscribe for crazy ideas before everyone else\./);
+  assert.doesNotMatch(html, /This will bend your mind/);
+  assert.match(html, /name="_gotcha"/);
   assert.match(html, /type="submit"/);
+  assert.match(config, /formspreeEndpoint: "https:\/\/formspree\.io\/f\/mgojaavo"/);
+  assert.match(app, /formspreeEndpoint/);
+  assert.match(app, /Accept: "application\/json"/);
   assert.doesNotMatch(html, /Placeholder signup|Placeholder form/);
   assert.doesNotMatch(html, /Reddit|X Trend|Backlog: Reddit|twitter/i);
 });
