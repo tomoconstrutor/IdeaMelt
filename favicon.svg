@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Idea Melt favicon">
+  <rect width="64" height="64" rx="10" fill="#f5f2e9"/>
+  <path d="M1 16h62M1 32h62M1 48h62M16 1v62M32 1v62M48 1v62" stroke="#101112" stroke-opacity=".16" stroke-width="1"/>
+  <rect x="7" y="7" width="50" height="50" rx="7" fill="none" stroke="#101112" stroke-width="4"/>
+  <rect x="40" y="9" width="13" height="13" fill="#c9ff43" stroke="#101112" stroke-width="2"/>
+  <text x="32" y="42" fill="#101112" font-family="Arial Black, Impact, sans-serif" font-size="26" font-weight="900" text-anchor="middle" letter-spacing="-3">IM</text>
+</svg>

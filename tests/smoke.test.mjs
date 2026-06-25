@@ -13,6 +13,7 @@ test("signup forms are wired to frontend submit handler", () => {
   assert.equal(formMatches.length, 1);
   assert.match(html, /<script src="app\.config\.js"><\/script>/);
   assert.match(html, /<script src="app\.js" defer><\/script>/);
+  assert.match(html, /<link rel="icon" type="image\/svg\+xml" href="favicon\.svg">/);
   assert.match(html, /name="email"/);
   assert.match(html, /placeholder="type your email here"/);
   assert.match(html, /Subscribe for crazy ideas before everyone else\./);
